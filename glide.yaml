@@ -1,0 +1,6 @@
+package: github.com/shazam/jenkins-nodes-auto-scaler
+
+import:
+
+- package: golang.org/x/oauth2/google
+- package: google.golang.org/api/compute/v1

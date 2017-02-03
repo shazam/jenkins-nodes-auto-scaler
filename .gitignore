@@ -1,0 +1,10 @@
+*.lock
+/.settings
+.project
+.classpath
+*.swp
+*.iml
+vendor/*
+.idea/
+creds.json
+build/
