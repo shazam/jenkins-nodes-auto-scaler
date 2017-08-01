@@ -519,11 +519,16 @@ func jenkinsRequest(method string, path string) (*http.Response, error) {
 	req.SetBasicAuth(*jenkinsUsername, *jenkinsApiToken)
 
 	resp, err := httpClient.Do(req)
+	if err != nil {
+		log.Printf("Error calling Jenkins API: %s\n", err.Error())
+		return nil, err
+	}
+
 	if resp.StatusCode == 401 {
 		panic("Failing authenticating to Jenkins, check user and api token provided")
 	}
 
-	return resp, err
+	return resp, nil
 }
 
 func ensureCloudBoxIsNotRunning(buildBox string) {
