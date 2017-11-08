@@ -343,6 +343,13 @@ func disableNode(buildBox string) {
 	if !isNodeTemporarilyOffline(buildBox) {
 		log.Printf("%s is not offline, trying to toggle it offline\n", buildBox)
 		toggleNodeStatus(buildBox, "offline")
+
+		time.Sleep(2 * time.Second)
+		if !isNodeIdle(buildBox) {
+			log.Printf("%s accepted a new job in the meantime, aborting termination\n", buildBox)
+			toggleNodeStatus(buildBox, "online")
+			return
+		}
 	}
 
 	ensureCloudBoxIsNotRunning(buildBox)
