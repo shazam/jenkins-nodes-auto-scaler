@@ -1,4 +1,4 @@
-package: github.com/shazam/jenkins-nodes-auto-scaler
+package: github.com/lucanaldini/jenkins-nodes-auto-scaler
 
 import:
 

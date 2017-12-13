@@ -377,7 +377,8 @@ func launchNodeAgent(buildBox string) bool {
 				return
 			default:
 				if isAgentConnected(buildBox) {
-					online <- true
+					time.Sleep(10 * time.Second)
+					online <- isAgentConnected(buildBox)
 					return
 				}
 
