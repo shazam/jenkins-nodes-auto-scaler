@@ -377,8 +377,13 @@ func launchNodeAgent(buildBox string) bool {
 				return
 			default:
 				if isAgentConnected(buildBox) {
-					online <- true
-					return
+					time.Sleep(10 * time.Second)
+					if stillConnected := isAgentConnected(buildBox); !stillConnected {
+						log.Printf("Agent appeared to be connected for %s, but it disconnected shortly after\n", buildBox)
+					} else {
+						online <- true
+						return
+					}
 				}
 
 				if counter%10 == 0 {
