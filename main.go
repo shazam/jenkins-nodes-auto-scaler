@@ -531,7 +531,9 @@ func jenkinsRequest(method string, path string) (*http.Response, error) {
 	req.SetBasicAuth(*jenkinsUsername, *jenkinsApiToken)
 	if method == "POST" {
 		crumb := jenkinsRequestCrumb()
-		req.Header.Add(strings.Split(crumb,":")[0],strings.Split(crumb,":")[1])
+		if crumb != "0" {
+			req.Header.Add(strings.Split(crumb,":")[0],strings.Split(crumb,":")[1])
+		}
 	}
 
 	resp, err := httpClient.Do(req)
@@ -553,8 +555,12 @@ func jenkinsRequestCrumb() string {
 
 	resp, err := httpClient.Do(req)
 	if err != nil {
-		log.Printf("Error requesting Crumb %s\n", err.Error())
-		return "0:0"
+		log.Printf("Error calling Jenkins Crumb API: %s\n", err.Error())
+		return "0"
+	}
+
+	if resp.StatusCode == 404 {
+		return "0"
 	}
 
 	if resp.StatusCode == 401 {
