@@ -367,7 +367,7 @@ func toggleNodeStatus(buildBox string, message string) error {
 func launchNodeAgent(buildBox string) bool {
 	log.Printf("Agent was launched for %s, waiting for it to come online\n", buildBox)
 
-	quit := make(chan bool)
+	quit := make(chan bool, 1)
 	online := make(chan bool, 1)
 	go func() {
 		counter := 0
@@ -402,9 +402,9 @@ func launchNodeAgent(buildBox string) bool {
 	select {
 	case <-online:
 	case <-time.After(time.Second * 120):
-		log.Printf("Unable to launch the agent for %s successfully, shutting down", buildBox)
 		quit <- true
 		agentLaunched = false
+		log.Printf("Unable to launch the agent for %s successfully, shutting down", buildBox)
 		stopCloudBox(buildBox)
 	}
 
@@ -620,28 +620,47 @@ func disableAllBuildBoxes() {
 	wg.Wait()
 }
 
-func waitForStatus(buildBox string, status string) error {
-	previousStatus := ""
-	for {
-		i, err := service.Instances.Get(*gceProjectName, *gceZone, buildBox).Do()
-		if nil != err {
-			log.Printf("Failed to get instance data for %s: %v\n", buildBox, err)
-			continue
+func waitForStatus(buildBox string, status string) {
+	completed := make(chan bool, 1)
+	quit := make(chan bool)
+
+	go func() {
+		previousStatus := ""
+		for {
+			select {
+			case <- quit:
+				return
+			default:
+			}
+
+			i, err := service.Instances.Get(*gceProjectName, *gceZone, buildBox).Do()
+			if nil != err {
+				log.Printf("Failed to get instance data for %s: %v\n", buildBox, err)
+				continue
+			}
+
+			if previousStatus != i.Status {
+				log.Printf("    %s -> %s\n", buildBox, i.Status)
+				previousStatus = i.Status
+			}
+
+			if i.Status == status {
+				log.Printf("    %s reached %s status\n", buildBox, status)
+				break
+			}
+
+			time.Sleep(time.Second * 3)
 		}
 
-		if previousStatus != i.Status {
-			log.Printf("  %s -> %s\n", buildBox, i.Status)
-			previousStatus = i.Status
-		}
+		completed <- true
+	}()
 
-		if i.Status == status {
-			log.Printf("==> %s is %s\n", buildBox, status)
-			return nil
-		}
-
-		time.Sleep(time.Second * 3)
+	select {
+	case <-completed:
+	case <-time.After(1 * time.Minute):
+		quit <- true
+		log.Printf("    %s did not reach %s status within a reasonable time\n", buildBox, status)
 	}
-	return nil
 }
 
 func getServiceWithCredsFile() (*compute.Service, error) {
