@@ -203,7 +203,7 @@ func enableNode(buildBox string) bool {
 	startCloudBox(buildBox)
 	agentLaunched := true
 	if !isAgentConnected(buildBox) {
-		agentLaunched = launchNodeAgent(buildBox)
+		agentLaunched = connectNodeAgent(buildBox)
 	}
 	if agentLaunched && isNodeTemporarilyOffline(buildBox) {
 		toggleNodeStatus(buildBox, "online")
@@ -357,14 +357,14 @@ func disableNode(buildBox string) {
 
 func toggleNodeStatus(buildBox string, message string) error {
 	resp, err := jenkinsRequest("POST", "/computer/"+buildBox+"/toggleOffline")
+	defer closeResponseBody(resp)
 	if err == nil {
-		defer resp.Body.Close()
 		log.Printf("%s was toggled temporarily %s\n", buildBox, message)
 	}
 	return err
 }
 
-func launchNodeAgent(buildBox string) bool {
+func connectNodeAgent(buildBox string) bool {
 	log.Printf("Agent was launched for %s, waiting for it to come online\n", buildBox)
 
 	quit := make(chan bool, 1)
@@ -387,10 +387,7 @@ func launchNodeAgent(buildBox string) bool {
 				}
 
 				if counter%10 == 0 {
-					resp, err := jenkinsRequest("POST", "/computer/"+buildBox+"/launchSlaveAgent")
-					if err == nil {
-						resp.Body.Close()
-					}
+					launchNodeAgent(buildBox)
 				}
 			}
 			time.Sleep(time.Second)
@@ -398,17 +395,22 @@ func launchNodeAgent(buildBox string) bool {
 		}
 	}()
 
-	agentLaunched := true
+	agentConnected := true
 	select {
 	case <-online:
 	case <-time.After(time.Second * 120):
 		quit <- true
-		agentLaunched = false
+		agentConnected = false
 		log.Printf("Unable to launch the agent for %s successfully, shutting down", buildBox)
 		stopCloudBox(buildBox)
 	}
 
-	return agentLaunched
+	return agentConnected
+}
+
+func launchNodeAgent(buildBox string) {
+	resp, _ := jenkinsRequest("POST", "/computer/"+buildBox+"/launchSlaveAgent")
+	defer closeResponseBody(resp)
 }
 
 func stopCloudBox(buildBox string) error {
@@ -427,11 +429,10 @@ func stopCloudBox(buildBox string) error {
 
 func isAgentConnected(buildBox string) bool {
 	resp, err := jenkinsRequest("GET", "/computer/"+buildBox+"/logText/progressiveHtml")
-
+	defer closeResponseBody(resp)
 	if err != nil {
 		return false
 	}
-	defer resp.Body.Close()
 
 	content, _ := ioutil.ReadAll(resp.Body)
 
@@ -463,11 +464,11 @@ func isNodeIdle(buildBox string) bool {
 
 func fetchNodeInfo(buildBox string) JenkinsBuildBoxInfo {
 	resp, err := jenkinsRequest("GET", "/computer/"+buildBox+"/api/json")
+	defer closeResponseBody(resp)
 	if err != nil {
 		log.Printf("Error deserialising Jenkins build box %s info API call: %s\n", buildBox, err.Error())
 		return JenkinsBuildBoxInfo{}
 	}
-	defer resp.Body.Close()
 
 	decoder := json.NewDecoder(resp.Body)
 	var data JenkinsBuildBoxInfo
@@ -482,10 +483,10 @@ func adjustQueueSizeDependingWhetherJobRequiringAllNodesIsRunning(queueSize int)
 	}
 
 	resp, err := jenkinsRequest("GET", "/job/"+*jobNameRequiringAllNodes+"/api/json")
+	defer closeResponseBody(resp)
 	if err != nil {
 		return queueSize
 	}
-	defer resp.Body.Close()
 
 	decoder := json.NewDecoder(resp.Body)
 	var data JenkinsJob
@@ -503,11 +504,11 @@ func adjustQueueSizeDependingWhetherJobRequiringAllNodesIsRunning(queueSize int)
 
 func fetchQueueSize() int {
 	resp, err := jenkinsRequest("GET", "/queue/api/json")
+	defer closeResponseBody(resp)
 	if err != nil {
 		log.Printf("Error deserialising Jenkins queue API call: %s\n", err.Error())
 		return 0
 	}
-	defer resp.Body.Close()
 
 	decoder := json.NewDecoder(resp.Body)
 	var data JenkinsQueue
@@ -533,7 +534,7 @@ func jenkinsRequest(method string, path string) (*http.Response, error) {
 	resp, err := httpClient.Do(req)
 	if err != nil {
 		log.Printf("Error calling Jenkins API: %s\n", err.Error())
-		return nil, err
+		return resp, err
 	}
 
 	if resp.StatusCode == 401 {
@@ -541,6 +542,12 @@ func jenkinsRequest(method string, path string) (*http.Response, error) {
 	}
 
 	return resp, nil
+}
+
+func closeResponseBody(response *http.Response) {
+	if response != nil && response.Body != nil {
+		response.Body.Close()
+	}
 }
 
 func ensureCloudBoxIsNotRunning(buildBox string) {
