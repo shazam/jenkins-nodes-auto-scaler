@@ -530,6 +530,12 @@ func fetchQueueSize() int {
 func jenkinsRequest(method string, path string) (*http.Response, error) {
 	req, err := http.NewRequest(method, strings.TrimRight(*jenkinsBaseUrl, "/")+path, nil)
 	req.SetBasicAuth(*jenkinsUsername, *jenkinsApiToken)
+	if method == "POST" {
+		crumb := jenkinsRequestCrumb()
+		if crumb != "0" {
+			req.Header.Add(strings.Split(crumb,":")[0],strings.Split(crumb,":")[1])
+		}
+	}
 
 	resp, err := httpClient.Do(req)
 	if err != nil {
@@ -548,6 +554,28 @@ func closeResponseBody(response *http.Response) {
 	if response != nil && response.Body != nil {
 		response.Body.Close()
 	}
+}
+
+func jenkinsRequestCrumb() string {
+	req, err := http.NewRequest("GET", strings.TrimRight(*jenkinsBaseUrl, "/")+"/crumbIssuer/api/xml?xpath=concat(//crumbRequestField,\":\",//crumb)", nil)
+	req.SetBasicAuth(*jenkinsUsername, *jenkinsApiToken)
+
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		log.Printf("Error calling Jenkins Crumb API: %s\n", err.Error())
+		return "0"
+	}
+
+	if resp.StatusCode == 404 {
+		return "0"
+	}
+
+	if resp.StatusCode == 401 {
+		panic("Failing authenticating to Jenkins, check user and api token provided")
+	}
+	crumb, err := ioutil.ReadAll(resp.Body)
+	resp.Body.Close()
+	return string(crumb[:])
 }
 
 func ensureCloudBoxIsNotRunning(buildBox string) {
