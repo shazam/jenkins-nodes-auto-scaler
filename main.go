@@ -552,6 +552,9 @@ func jenkinsRequest(method string, path string) (*http.Response, error) {
 
 func closeResponseBody(response *http.Response) {
 	if response != nil && response.Body != nil {
+		if _, err := ioutil.ReadAll(response.Body); err != nil {
+			log.Println(err)
+		}
 		response.Body.Close()
 	}
 }
