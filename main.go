@@ -564,6 +564,7 @@ func jenkinsRequestCrumb() string {
 	req.SetBasicAuth(*jenkinsUsername, *jenkinsApiToken)
 
 	resp, err := httpClient.Do(req)
+	defer closeResponseBody(resp)
 	if err != nil {
 		log.Printf("Error calling Jenkins Crumb API: %s\n", err.Error())
 		return "0"
@@ -577,7 +578,6 @@ func jenkinsRequestCrumb() string {
 		panic("Failing authenticating to Jenkins, check user and api token provided")
 	}
 	crumb, err := ioutil.ReadAll(resp.Body)
-	resp.Body.Close()
 	return string(crumb[:])
 }
 
